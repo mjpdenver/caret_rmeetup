@@ -1,26 +1,64 @@
----
-title       : 
-subtitle    : 
-author      : 
+title       : caret package - a brief demonstration 
+subtitle    : Denver R Meetup
+author      : Matthew Pocernich
 job         : 
-framework   : io2012        # {io2012, html5slides, shower, dzslides, ...}
+framework   : revealjs        # {io2012, html5slides, shower, dzslides, ...}
 highlighter : highlight.js  # {highlight.js, prettify, highlight}
 hitheme     : tomorrow      # 
 widgets     : []            # {mathjax, quiz, bootstrap}
 mode        : selfcontained # {standalone, draft}
 knit        : slidify::knit2slides
 ---
+# Outline
 
-## Read-And-Delete
+1. Overview of caret
+2. Demonstration
+3. Examining options
 
-1. Edit YAML front matter
-2. Write using R Markdown
-3. Use an empty line followed by three dashes to separate slides!
+--- 
 
---- .class #id 
+# What is the issue?
 
-## Slide 2
+1.  Hundreds of tools
+2.  Machine learning - practically, not theoretically - what works best
+3.  Modes can be subtlely - or not so subtley different in syntax.
+4.  Integrating input and output to make comparisons can be challenging.
+
+----
+
+# A random forest model
+
+```{r dataRead}
+
+library(plyr)
+dat <- read.table("https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/breast-cancer-wisconsin.data", header = FALSE, sep = ",", as.is = TRUE)
+
+# 1. Sample code number            id number
+# 2. Clump Thickness               1 - 10
+# 3. Uniformity of Cell Size       1 - 10
+# 4. Uniformity of Cell Shape      1 - 10
+# 5. Marginal Adhesion             1 - 10
+# 6. Single Epithelial Cell Size   1 - 10
+# 7. Bare Nuclei                   1 - 10
+# 8. Bland Chromatin               1 - 10
+# 9. Normal Nucleoli               1 - 10
+# 10. Mitoses                       1 - 10
+# 11. Class:                        (2 for benign, 4 for malignant)
 
 
+dat$V7 <- as.integer(dat$V7)
+dat <- na.omit(dat)
 
+dat <- dat[,-1] ## drop id row
+names(dat) <- c("clump_thick", "unif_size", "unif_shape", "unif_adhesion", "epi_size", "bare_nuc", "bland_chrom", "norm_nucleoli", "mitosis", "class")
+dat$class <- as.character(dat$class)
+dat$class <- plyr::mapvalues(x =  dat$class, from=c("2", "4"), c("benign","malignant") )
+dat$class <- as.factor(dat$class)
+
+library(randomForest)
+
+rf <- randomForest(x = dat[, 1:9], y = as.factor(dat[,10]), )
+
+plot(rf)
+```
 
