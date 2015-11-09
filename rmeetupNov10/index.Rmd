@@ -2,12 +2,15 @@ title       : caret package - a brief demonstration
 subtitle    : Denver R Meetup
 author      : Matthew Pocernich
 job         : 
-framework   : revealjs        # {io2012, html5slides, shower, dzslides, ...}
+framework   : io2012        # {io2012, html5slides, shower, dzslides, ...}
 highlighter : highlight.js  # {highlight.js, prettify, highlight}
 hitheme     : tomorrow      # 
 widgets     : []            # {mathjax, quiz, bootstrap}
 mode        : selfcontained # {standalone, draft}
 knit        : slidify::knit2slides
+github:
+    user: mjpdenver
+    repo: test
 ---
 # Outline
 
@@ -26,11 +29,16 @@ knit        : slidify::knit2slides
 
 ----
 
-# A random forest model
+# The data ( )
 
-```{r dataRead}
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set( echo=FALSE, warning=FALSE, message=FALSE)
+```
+ 
+```{r dataRead, echo=FALSE, comment=FALSE}
 
 library(plyr)
+library(caret)
 dat <- read.table("https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/breast-cancer-wisconsin.data", header = FALSE, sep = ",", as.is = TRUE)
 
 # 1. Sample code number            id number
@@ -54,11 +62,164 @@ names(dat) <- c("clump_thick", "unif_size", "unif_shape", "unif_adhesion", "epi_
 dat$class <- as.character(dat$class)
 dat$class <- plyr::mapvalues(x =  dat$class, from=c("2", "4"), c("benign","malignant") )
 dat$class <- as.factor(dat$class)
+print(head(dat))
 
-library(randomForest)
+i <- sample(x = 1:nrow(dat), size = nrow(dat)/3,replace = FALSE)
+dat_train <- dat[-i,]
+dat_test <- dat[i, ]
 
-rf <- randomForest(x = dat[, 1:9], y = as.factor(dat[,10]), )
+print(head(dat_test))
 
-plot(rf)
 ```
 
+---
+
+## Random Forest Model
+```{r executeRF, echo=FALSE}
+library(randomForest, quietly = TRUE)
+
+rf <- randomForest( class ~., dat_train)
+print(rf)
+
+```
+
+---
+
+## Random Forest Model - predicted
+
+```{r sumRF, echo=FALSE}
+library(randomForest, quietly = TRUE)
+
+mod_rf_pred <- predict(rf, newdata = dat_test)
+out_put = data.frame( class = dat_test$class, predicted = mod_rf_pred)
+
+x<- table(out_put)
+confusionMatrix(x)
+
+```
+
+
+--
+
+## Try something else - Naive Bayes Classifier
+
+```{r naiveBayes, warning=FALSE }
+library(klaR)
+
+mod_nb <- NaiveBayes( class ~., data = dat)
+mod_nb_pred <- predict( mod_nb) ## r
+
+out_put = data.frame( class = dat$class, nb_pred = mod_nb_pred$class)
+
+x<- table(out_put)
+confusionMatrix(x)
+
+````
+
+---
+
+## Try something else - Boosted Classification
+
+```{r ada }
+library(ada)
+
+mod_ada <- ada( class ~., data = dat_train)
+mod_ada_pred <- predict( mod_ada, dat_test) #, newdata = dat, type = "decision" ) ## r
+
+out_put = data.frame( class = dat_test$class, predicted = mod_ada_pred)
+
+x<- table(out_put)
+confusionMatrix(x)
+
+```
+
+---
+
+## Which is best? 
+
+Yuck
+```{r caretRF}
+
+fitControl <- trainControl(## 10-fold CV
+     method = "cv",
+     number = 10)
+
+set.seed(825)
+rf_caret <- train(class ~ ., data = dat_train,
+                 method = "rf",
+                trControl = trainControl(method = "cv"),  ## outline methods
+#                 trControl = fitControl,
+                 verbose = FALSE) ### what does metric mean? What does it do?
+
+
+rf_caret_p <- predict(rf_caret,newdata = dat_test)
+
+confusionMatrix(table(dat_test$class,rf_caret_p))
+
+```
+
+
+
+---
+
+## Boosted Classification - caret
+### note - this takes a while because there are three tuning parameters
+
+```{r caretada}
+
+set.seed(825)
+ada_caret <- train(class ~ ., data = dat_train,
+                 method = "ada",
+                trControl = trainControl(method = "cv"),  ## outline methods
+#                 trControl = fitControl,
+                 verbose = FALSE) ### what does metric mean? What does it do?
+
+
+ada_caret_p <- predict(ada_caret,newdata = dat_test)
+
+confusionMatrix(table(dat_test$class,ada_caret_p))
+
+```
+
+
+## Naive Bayes - caret
+
+```{r caretNaiveBayes}
+
+set.seed(825)
+nb_caret <- train(class ~ ., data = dat_train,
+                 method = "nb",
+                trControl = trainControl(method = "cv"),  ## outline methods
+#                 trControl = fitControl,
+                 verbose = FALSE) ### what does metric mean? What does it do?
+
+
+nb_caret_p <- predict(nb_caret,newdata = dat_test)
+
+confusionMatrix(table(dat_test$class,nb_caret_p))
+
+```
+
+
+```{r combine }
+
+resamps <- resamples(list(RF = rf_caret,
+                          NB = nb_caret,
+                          ADA = ada_caret))
+resamps
+summary(resamps)
+
+trellis.par.set(theme1)
+bwplot(resamps, layout = c(3, 1))
+
+
+trellis.par.set(caretTheme())
+dotplot(resamps, metric = "ROC")
+
+difValues <- diff(resamps)
+difValues
+summary(difValues)
+
+bwplot(difValues, layout = c(3, 1))
+
+```
