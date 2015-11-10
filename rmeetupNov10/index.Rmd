@@ -20,22 +20,22 @@ github:
 
 --- 
 
-# What is the issue?
+## What is the issue?
 
-1.  Hundreds of tools
+1.  Hundreds of prediction tools [ See Machine Learing Task Page](https://cran.r-project.org/web/views/MachineLearning.html)
 2.  Machine learning - practically, not theoretically - what works best
 3.  Modes can be subtlely - or not so subtley different in syntax.
 4.  Integrating input and output to make comparisons can be challenging.
 
 ----
 
-# The data ( )
+## The data ([Wisconsin Breast Cancer Data- UCI Repo](https://archive.ics.uci.edu/ml/) )
 
 ```{r global_options, include=FALSE}
-knitr::opts_chunk$set( echo=FALSE, warning=FALSE, message=FALSE)
+knitr::opts_chunk$set(  warning=FALSE, message=FALSE)
 ```
  
-```{r dataRead, echo=FALSE, comment=FALSE}
+```{r dataRead, echo=FALSE}
 
 library(plyr)
 library(caret)
@@ -62,21 +62,22 @@ names(dat) <- c("clump_thick", "unif_size", "unif_shape", "unif_adhesion", "epi_
 dat$class <- as.character(dat$class)
 dat$class <- plyr::mapvalues(x =  dat$class, from=c("2", "4"), c("benign","malignant") )
 dat$class <- as.factor(dat$class)
-print(head(dat))
+
 
 i <- sample(x = 1:nrow(dat), size = nrow(dat)/3,replace = FALSE)
 dat_train <- dat[-i,]
 dat_test <- dat[i, ]
 
-print(head(dat_test))
+dat_test
 
 ```
 
 ---
 
 ## Random Forest Model
-```{r executeRF, echo=FALSE}
-library(randomForest, quietly = TRUE)
+```{r executeRF, echo=TRUE}
+
+library(randomForest)
 
 rf <- randomForest( class ~., dat_train)
 print(rf)
@@ -85,10 +86,9 @@ print(rf)
 
 ---
 
-## Random Forest Model - predicted
+## Random Forest Model - extract and summarize test data prediction
 
-```{r sumRF, echo=FALSE}
-library(randomForest, quietly = TRUE)
+```{r sumRF, echo=TRUE}
 
 mod_rf_pred <- predict(rf, newdata = dat_test)
 out_put = data.frame( class = dat_test$class, predicted = mod_rf_pred)
@@ -118,7 +118,7 @@ confusionMatrix(x)
 
 ---
 
-## Try something else - Boosted Classification
+## One more - Boosted Classification
 
 ```{r ada }
 library(ada)
@@ -137,28 +137,40 @@ confusionMatrix(x)
 
 ## Which is best? 
 
-Yuck
-```{r caretRF}
+Yuck - we have somework to do.
+* Output vary
+* Track training and test data
+* Create graphics with new datasets.
 
-fitControl <- trainControl(## 10-fold CV
+---
+
+## caret - Random Forest Model
+
+```{r caretRF, echo = TRUE}
+
+fitControl <- trainControl(classProbs = TRUE,## 10-fold CV
      method = "cv",
      number = 10)
 
 set.seed(825)
 rf_caret <- train(class ~ ., data = dat_train,
                  method = "rf",
-                trControl = trainControl(method = "cv"),  ## outline methods
-#                 trControl = fitControl,
-                 verbose = FALSE) ### what does metric mean? What does it do?
-
-
-rf_caret_p <- predict(rf_caret,newdata = dat_test)
-
-confusionMatrix(table(dat_test$class,rf_caret_p))
+                trControl = trainControl(method = "cv"),  
+                 verbose = FALSE)
 
 ```
 
+---
 
+## Random Forest Output
+
+```{r rf_caret_out}
+rf_caret
+#rf_caret_p <- predict(rf_caret,newdata = dat_test)
+
+#confusionMatrix(table(dat_test$class,rf_caret_p))
+
+```
 
 ---
 
@@ -170,17 +182,30 @@ confusionMatrix(table(dat_test$class,rf_caret_p))
 set.seed(825)
 ada_caret <- train(class ~ ., data = dat_train,
                  method = "ada",
-                trControl = trainControl(method = "cv"),  ## outline methods
-#                 trControl = fitControl,
-                 verbose = FALSE) ### what does metric mean? What does it do?
-
-
-ada_caret_p <- predict(ada_caret,newdata = dat_test)
-
-confusionMatrix(table(dat_test$class,ada_caret_p))
+                trControl = trainControl(method = "cv"), 
+                 verbose = FALSE) 
 
 ```
 
+---
+
+## Boosted Classification Output
+
+```{r ada_caret_output}
+ada_caret
+
+```
+
+
+## Boosted Classification - Parameter Selection Output
+
+```{r ada_caret_graphic, echo=TRUE}
+ggplot(ada_caret)
+
+```
+
+
+---
 
 ## Naive Bayes - caret
 
@@ -201,7 +226,11 @@ confusionMatrix(table(dat_test$class,nb_caret_p))
 ```
 
 
-```{r combine }
+---
+
+### Compare Models
+
+```{r combine}
 
 resamps <- resamples(list(RF = rf_caret,
                           NB = nb_caret,
@@ -209,12 +238,10 @@ resamps <- resamples(list(RF = rf_caret,
 resamps
 summary(resamps)
 
-trellis.par.set(theme1)
+
 bwplot(resamps, layout = c(3, 1))
 
 
-trellis.par.set(caretTheme())
-dotplot(resamps, metric = "ROC")
 
 difValues <- diff(resamps)
 difValues
@@ -223,3 +250,67 @@ summary(difValues)
 bwplot(difValues, layout = c(3, 1))
 
 ```
+
+
+---
+
+## trainControl - training options
+
+>1. Type of cross validation
+>2. number, number of folds in crossvalidation.
+>3. selectionFunction - defaults to accuracy.
+>4. allowParallel - looks interesting.
+
+---
+
+## train options
+
+>1. method (see list of models)
+>2. tuning grid, tunelength or fixed values.
+>3. preProcess data - center and scaling
+
+---
+
+## Revisit random forest
+
+```{r rf_revisited}
+require(pROC)
+
+rocGrid <-  expand.grid(mtry = c(2,3,4,6,8))
+
+fitControl <- trainControl(classProbs = TRUE,## 10-fold CV
+     method = "cv",
+     number = 10, 
+     summaryFunction = twoClassSummary)
+
+set.seed(825)
+rf_caret <- train(class ~ ., data = dat_train,
+                 method = "rf",
+                trControl = fitControl,  
+                 verbose = FALSE,
+                metric = "ROC",
+                tuneGrid = rocGrid) ### what does metric mean? What does it do?
+
+
+rf_caret_p <- predict(rf_caret,newdata = dat_test)
+
+confusionMatrix(table(dat_test$class,rf_caret_p))
+
+ggplot(rf_caret)
+
+```
+
+
+---
+
+### Preprossesing  Tools
+
+1. Impute missing values
+2. Center and scale
+3. Identify Correlated Predictors (findCorrelation)
+4. Identify near zero covariance  (nearZeroVar)
+5. Find linear dependancies (findLinearCombos)
+6. Transformation and Distance Matrices
+
+
+
